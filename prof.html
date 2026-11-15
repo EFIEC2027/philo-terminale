@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableau de bord · Philosophie</title>
+<link rel="icon" href="logo-efi.png">
+<link rel="stylesheet" href="style.css?v=20261115a">
+<style>
+.connexion { max-width: 400px; margin: 40px auto; display: grid; gap: 12px; }
+.onglets { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0; }
+.onglets button, .puces button { font: inherit; font-weight: 600; padding: .45rem .9rem; border-radius: 999px; border: 1.5px solid var(--trait); background: var(--papier); cursor: pointer; color: var(--encre); }
+.onglets button[aria-pressed=true], .puces button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.puces { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.outils { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.chiffres { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.chiffres div { background: var(--info-doux); border-radius: 10px; padding: 8px 14px; }
+.chiffres b { font-size: 1.3rem; font-family: var(--f-titre); display: block; }
+.n.bas { color: var(--ko); font-weight: 700; } .n.haut { color: var(--ok); font-weight: 700; }
+.etat { font-size: .82rem; font-weight: 700; padding: .1rem .5rem; border-radius: 999px; background: var(--info-doux); white-space: nowrap; }
+.etat.cours { background: #fff4d6; } .etat.bloque { background: var(--ko-doux); color: var(--ko); } .etat.rendu { background: var(--ok-doux); color: var(--ok); }
+.ligne-classe { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--trait); }
+.ligne-classe b { min-width: 50px; font-size: 1.1rem; }
+.ligne-classe select, .ligne-classe input { width: auto; }
+.ouvert { color: var(--ok); font-weight: 700; }
+.code-el { font-family: ui-monospace, monospace; font-weight: 700; }
+@media print { .entete, .onglets, .outils .puces, .outils button, #barre-maj { display: none !important; } body { background: #fff; } .carte { border: none; padding: 0; } }
+</style>
+</head>
+<body>
+<div class="demo" id="demo" hidden>Mode démonstration : données fictives.</div>
+<header class="entete">
+  <img class="logo" src="logo-efi.png" alt="EFI Casablanca">
+  <div class="marque">Philosophie <span>· tableau de bord</span></div>
+  <div class="droite" id="barre-maj" hidden><span class="note-info" id="maj"></span><button class="bouton" id="b-actualiser" type="button">Actualiser</button><button class="bouton discret" id="b-oublier" type="button">Se déconnecter</button></div>
+</header>
+<main class="page">
+  <form class="carte connexion" id="form-cle">
+    <h1>Tableau de bord</h1>
+    <label class="champ">Mot de passe<input type="password" id="cle" required></label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="memo" checked> Rester connectée sur cet ordinateur</label>
+    <p class="erreur" id="erreur-cle" hidden></p>
+    <button class="bouton plein" type="submit">Entrer</button>
+  </form>
+
+  <div id="tableau" hidden>
+    <div class="outils"><div class="puces" id="classes"></div></div>
+    <nav class="onglets" id="onglets">
+      <button type="button" data-vue="notes" aria-pressed="true">Notes</button>
+      <button type="button" data-vue="entr" aria-pressed="false">Entraînement</button>
+      <button type="button" data-vue="direct" aria-pressed="false">🔴 Quiz en direct</button>
+      <button type="button" data-vue="ouvrir" aria-pressed="false">Ouvrir un quiz noté</button>
+      <button type="button" data-vue="codes" aria-pressed="false">Codes élèves</button>
+    </nav>
+
+    <section class="carte" data-section="notes">
+      <div class="outils"><h2 style="margin:0">Notes des quiz notés</h2><div class="puces"><select id="notes-quiz"></select><button class="bouton" id="b-csv" type="button">Exporter pour Pronote (CSV)</button></div></div>
+      <div class="chiffres" id="notes-chiffres"></div>
+      <div class="defile"><table class="tab" id="notes-tab"></table></div>
+      <p class="note-info" style="margin-top:8px">La note est calculée automatiquement : 1 point par bonne réponse sur 20, + 1 point de bonus, plafonnée à 20. « Sorties » = nombre de fois où l'élève a quitté le quiz.</p>
+    </section>
+
+    <section class="carte" data-section="entr" hidden>
+      <h2>Quiz d'entraînement (non notés)</h2>
+      <p class="note-info">Meilleure note sur 20 · nombre d'essais terminés · abandons (sorties du quiz).</p>
+      <div class="defile"><table class="tab" id="entr-tab"></table></div>
+    </section>
+
+    <section class="carte" data-section="direct" hidden>
+      <div class="outils"><h2 style="margin:0">Quiz noté en direct</h2><span class="note-info">Actualisation automatique toutes les 20 secondes.</span></div>
+      <div class="chiffres" id="direct-chiffres"></div>
+      <div class="defile"><table class="tab" id="direct-tab"></table></div>
+      <p class="note-info" style="margin-top:8px">Un élève « bloqué » est sorti du quiz : tapez le code de déblocage sur son écran.</p>
+    </section>
+
+    <section class="carte" data-section="ouvrir" hidden>
+      <h2>Ouvrir ou fermer un quiz noté</h2>
+      <p class="note-info">Un quiz noté ne s'ouvre que pour la classe choisie. Indiquez l'heure de fin du cours : il se fermera tout seul (les élèves déjà commencés peuvent finir).</p>
+      <div id="ouvrir-lignes"></div>
+      <h3 style="margin-top:20px">Code de déblocage</h3>
+      <p class="note-info" id="etat-deblocage"></p>
+      <div class="puces"><input type="password" id="nouveau-deblocage" placeholder="Nouveau code (4 caractères ou plus)" style="max-width:280px"><button class="bouton" id="b-deblocage" type="button">Enregistrer</button></div>
+    </section>
+
+    <section class="carte" data-section="codes" hidden>
+      <div class="outils"><h2 style="margin:0">Identifiants et codes</h2><button class="bouton" type="button" onclick="print()">Imprimer</button></div>
+      <p class="note-info">« provisoire » : l'élève ne s'est pas encore connecté ; il choisira son propre code à la première connexion. Vous voyez toujours le code actuel.</p>
+      <div class="defile"><table class="tab" id="codes-tab"></table></div>
+    </section>
+  </div>
+</main>
+
+<script src="config.js?v=20261115a"></script>
+<script src="commun.js?v=20261115a"></script>
+<script src="quiz-entrainement.js?v=20261115a"></script>
+<script src="evaluations.js?v=20261115a"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = P.esc, virg = P.virgule;
+let CLE = null, D = null, CLASSE = null, VUE = "notes";
+const NOTES = window.QUIZ_NOTES || [], ENTR = window.QUIZ_ENTRAINEMENT || [];
+const titre = id => ((NOTES.find(q => q.id === id) || ENTR.find(q => q.id === id)) || {}).titre || id;
+const heure = t => new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+const dateCourte = t => new Date(t).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) + " " + heure(t);
+const nomComplet = e => `${e.nom} ${e.prenom}`.trim();
+const tri = (a, b) => (a.nom + a.prenom).localeCompare(b.nom + b.prenom, "fr");
+
+function demo() {
+  const el = [["TA", "BASOCO", "Yacine"], ["TA", "BENKIRANE", "Ghita"], ["TB", "ADRAOUI", "Meriem"], ["TC", "AJABLI", "Hiba"]]
+    .map(([c, n, p]) => ({ id: (p + "." + n).toLowerCase(), classe: c, nom: n, prenom: p, code: "4821", provisoire: false }));
+  return { ok: true, eleves: el, notes: [{ id: el[0].id, quiz: "q1", note: 15, bonnes: 14, bonus: 1, t: Date.now(), incidents: 0 }], entrainement: [{ id: el[1].id, quiz: "e1", note: 17, abandon: false, t: Date.now() }],
+           suivi: [{ id: el[1].id, quiz: "q1", debut: Date.now() - 300000, rendu: false, incidents: 1, verrouille: true, repondues: 8 }], ouvertes: { TA: "q1" }, fins: {}, quizNotes: ["q1"], deblocage: true, genere: Date.now() };
+}
+
+async function charger() {
+  $("maj").textContent = "Chargement…";
+  try {
+    const d = P.DEMO ? demo() : await P.get({ action: "donnees", cle: CLE });
+    if (!d.ok) { if (d.erreur === "mot_de_passe") { P.local.suppr("philo:cle"); sessionStorage.removeItem("philo:cle"); location.reload(); } throw new Error(d.erreur); }
+    D = d;
+    $("maj").textContent = "Mis à jour à " + heure(Date.now());
+    dessiner();
+  } catch { $("maj").textContent = "Chargement impossible. Vérifiez la connexion, puis « Actualiser »."; }
+}
+function ouvrirTableau() {
+  $("form-cle").hidden = true; $("tableau").hidden = false; $("barre-maj").hidden = false;
+  charger();
+  setInterval(() => { if (VUE === "direct" && !document.hidden) charger(); }, 20000);
+}
+$("form-cle").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  CLE = $("cle").value;
+  if (!P.DEMO) {
+    try { const d = await P.get({ action: "donnees", cle: CLE }); if (!d.ok) { $("erreur-cle").textContent = "Mot de passe incorrect."; $("erreur-cle").hidden = false; return; } }
+    catch { $("erreur-cle").textContent = "Connexion impossible."; $("erreur-cle").hidden = false; return; }
+  }
+  if ($("memo").checked) P.local.ecrire("philo:cle", CLE); else sessionStorage.setItem("philo:cle", JSON.stringify(CLE));
+  ouvrirTableau();
+});
+$("b-actualiser").addEventListener("click", charger);
+$("b-oublier").addEventListener("click", () => { P.local.suppr("philo:cle"); sessionStorage.removeItem("philo:cle"); location.reload(); });
+document.querySelectorAll("#onglets button").forEach(b => b.addEventListener("click", () => {
+  VUE = b.dataset.vue;
+  document.querySelectorAll("#onglets button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  document.querySelectorAll("[data-section]").forEach(s => s.hidden = s.dataset.section !== VUE);
+  if (VUE === "direct") charger(); else dessiner();
+}));
+
+function classes() { return [...new Set(D.eleves.map(e => e.classe))].filter(Boolean).sort(); }
+function elevesClasse() { return D.eleves.filter(e => e.classe === CLASSE).sort(tri); }
+function dessiner() {
+  if (!D) return;
+  const cs = classes();
+  if (!CLASSE || !cs.includes(CLASSE)) CLASSE = cs[0];
+  $("classes").innerHTML = cs.map(c => `<button type="button" aria-pressed="${c === CLASSE}" data-c="${esc(c)}">${esc(c)}</button>`).join("");
+  $("classes").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { CLASSE = b.dataset.c; dessiner(); }));
+  ({ notes: vueNotes, entr: vueEntr, direct: vueDirect, ouvrir: vueOuvrir, codes: vueCodes })[VUE]();
+}
+
+/* ---------- Notes ---------- */
+function vueNotes() {
+  const sel = $("notes-quiz"), avant = sel.value;
+  const ids = [...new Set([...NOTES.map(q => q.id), ...D.notes.map(n => n.quiz)])];
+  sel.innerHTML = ids.map(id => `<option value="${esc(id)}">${esc(titre(id))}</option>`).join("");
+  if (ids.includes(avant)) sel.value = avant;
+  const q = sel.value, el = elevesClasse();
+  const notes = Object.fromEntries(D.notes.filter(n => n.quiz === q).map(n => [n.id, n]));
+  const vals = el.map(e => notes[e.id]).filter(Boolean).map(n => n.note);
+  const moy = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10 : null;
+  $("notes-chiffres").innerHTML = `<div><b>${vals.length} / ${el.length}</b>copies rendues</div><div><b>${moy === null ? "–" : virg(moy)}</b>moyenne de la classe</div><div><b>${vals.length ? Math.min(...vals) + " – " + Math.max(...vals) : "–"}</b>note la plus basse – la plus haute</div>`;
+  $("notes-tab").innerHTML = `<thead><tr><th>Élève</th><th class="n">Note / 20</th><th class="n">Bonnes / 20</th><th class="n">Bonus</th><th class="n">Sorties</th><th>Rendu le</th></tr></thead><tbody>` +
+    el.map(e => { const n = notes[e.id]; return n
+      ? `<tr><td>${esc(nomComplet(e))}</td><td class="n ${n.note < 10 ? "bas" : n.note >= 16 ? "haut" : ""}">${virg(n.note)}</td><td class="n">${n.bonnes}</td><td class="n">${n.bonus ? "✓" : "–"}</td><td class="n">${n.incidents || 0}</td><td>${dateCourte(n.t)}${n.auto ? " (auto)" : ""}</td></tr>`
+      : `<tr><td>${esc(nomComplet(e))}</td><td class="n">–</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="note-info">pas rendu</td></tr>`; }).join("") + "</tbody>";
+}
+$("notes-quiz").addEventListener("change", vueNotes);
+$("b-csv").addEventListener("click", () => {
+  const q = $("notes-quiz").value, notes = Object.fromEntries(D.notes.filter(n => n.quiz === q).map(n => [n.id, n.note]));
+  const lignes = [["Nom", "Prénom", "Note"]].concat(elevesClasse().map(e => [e.nom, e.prenom, notes[e.id] === undefined ? "" : String(notes[e.id]).replace(".", ",")]));
+  const csv = "﻿" + lignes.map(l => l.map(x => `"${String(x).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `Notes_${CLASSE}_${q}.csv`; document.body.appendChild(a); a.click(); a.remove();
+});
+
+/* ---------- Entraînement ---------- */
+function vueEntr() {
+  const el = elevesClasse();
+  const st = {};
+  D.entrainement.forEach(x => {
+    const k = x.id + "|" + x.quiz, s = st[k] || (st[k] = { best: null, n: 0, ab: 0, last: 0 });
+    if (x.abandon) s.ab++; else { s.n++; if (s.best === null || x.note > s.best) s.best = x.note; }
+    s.last = Math.max(s.last, x.t);
+  });
+  $("entr-tab").innerHTML = `<thead><tr><th>Élève</th>${ENTR.map(q => `<th class="n" title="${esc(q.titre)}">${esc(q.titre)}</th>`).join("")}<th>Dernière activité</th></tr></thead><tbody>` +
+    el.map(e => {
+      let last = 0;
+      const cases = ENTR.map(q => { const s = st[e.id + "|" + q.id]; if (!s) return '<td class="n note-info">–</td>'; last = Math.max(last, s.last);
+        return `<td class="n"><b>${s.best === null ? "–" : virg(s.best)}</b><br><small class="note-info">${s.n} essai${s.n > 1 ? "s" : ""}${s.ab ? ` · ${s.ab} abandon${s.ab > 1 ? "s" : ""}` : ""}</small></td>`; }).join("");
+      return `<tr><td>${esc(nomComplet(e))}</td>${cases}<td>${last ? dateCourte(last) : '<span class="note-info">jamais</span>'}</td></tr>`;
+    }).join("") + "</tbody>";
+}
+
+/* ---------- En direct ---------- */
+function vueDirect() {
+  const q = D.ouvertes[CLASSE] || (D.suivi.filter(s => elevesClasse().some(e => e.id === s.id)).sort((a, b) => (b.debut || 0) - (a.debut || 0))[0] || {}).quiz;
+  if (!q) { $("direct-chiffres").innerHTML = '<div>Aucun quiz noté ouvert pour cette classe.</div>'; $("direct-tab").innerHTML = ""; return; }
+  const suivi = Object.fromEntries(D.suivi.filter(s => s.quiz === q).map(s => [s.id, s]));
+  const el = elevesClasse(); let nCours = 0, nBloq = 0, nRendu = 0;
+  const lignes = el.map(e => {
+    const s = suivi[e.id];
+    let etat = '<span class="etat">pas commencé</span>', det = "";
+    if (s && s.rendu) { nRendu++; etat = `<span class="etat rendu">rendu · ${virg(s.note)} / 20</span>`; }
+    else if (s && s.verrouille) { nBloq++; etat = '<span class="etat bloque">BLOQUÉ</span>'; det = `${s.repondues} / 21 répondues`; }
+    else if (s && s.debut) { nCours++; etat = '<span class="etat cours">en cours</span>'; det = `${s.repondues} / 21 répondues`; }
+    return `<tr><td>${esc(nomComplet(e))}</td><td>${etat}</td><td>${det}</td><td class="n">${s ? s.incidents : ""}</td><td>${s && s.debut ? heure(s.debut) : ""}</td></tr>`;
+  });
+  $("direct-chiffres").innerHTML = `<div><b>${esc(titre(q))}</b>${D.ouvertes[CLASSE] === q ? '<span class="ouvert">ouvert</span>' + (D.fins[CLASSE] ? " jusqu'à " + heure(D.fins[CLASSE]) : "") : "fermé"}</div><div><b>${nCours}</b>en cours</div><div><b style="color:var(--ko)">${nBloq}</b>bloqués</div><div><b>${nRendu} / ${el.length}</b>rendus</div>`;
+  $("direct-tab").innerHTML = `<thead><tr><th>Élève</th><th>État</th><th>Avancement</th><th class="n">Sorties</th><th>Commencé à</th></tr></thead><tbody>${lignes.join("")}</tbody>`;
+}
+
+/* ---------- Ouvrir / fermer ---------- */
+async function prof(op, extra) {
+  if (P.DEMO) { alert("Mode démonstration."); return; }
+  try {
+    const r = await P.post({ action: "prof", cle: CLE, op, ...extra });
+    if (!r.ok) { alert(r.erreur === "pas_de_code_deblocage" ? "Définissez d'abord le code de déblocage (en bas de cette page)." : "Action impossible : " + r.erreur); return; }
+    await charger();
+  } catch { alert("Connexion impossible."); }
+}
+function vueOuvrir() {
+  const fin = new Date(Date.now() + 55 * 60000), finDefaut = `${String(fin.getHours()).padStart(2, "0")}:${String(fin.getMinutes()).padStart(2, "0")}`;
+  $("ouvrir-lignes").innerHTML = classes().map(c => {
+    const o = D.ouvertes[c];
+    return `<div class="ligne-classe" data-c="${esc(c)}"><b>${esc(c)}</b>${o ? `<span class="ouvert">Ouvert : ${esc(titre(o))}${D.fins[c] ? " · fermeture à " + heure(D.fins[c]) : ""}</span><button class="bouton" data-op="fermer" type="button">Fermer</button>`
+      : `<select class="q">${NOTES.map(q => `<option value="${esc(q.id)}">${esc(q.titre)}</option>`).join("")}</select><label>fermer à <input type="time" class="fin" value="${finDefaut}"></label><button class="bouton plein" data-op="ouvrir" type="button">Ouvrir pour ${esc(c)}</button>`}</div>`;
+  }).join("");
+  $("ouvrir-lignes").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    const l = b.closest(".ligne-classe"), c = l.dataset.c;
+    if (b.dataset.op === "fermer") return prof("fermer", { classe: c });
+    const q = l.querySelector(".q").value, f = l.querySelector(".fin").value;
+    let ts = null;
+    if (f) { const [h, m] = f.split(":").map(Number); const d = new Date(); d.setHours(h, m, 0, 0); ts = d.getTime(); }
+    prof("ouvrir", { classe: c, quiz: q, fin: ts });
+  }));
+  $("etat-deblocage").textContent = D.deblocage ? "Un code de déblocage est enregistré. Vous pouvez le changer :" : "Aucun code de déblocage : définissez-en un avant d'ouvrir un quiz noté.";
+}
+$("b-deblocage").addEventListener("click", () => { const c = $("nouveau-deblocage").value.trim(); if (c.length < 4) return alert("4 caractères minimum."); $("nouveau-deblocage").value = ""; prof("deblocage", { code: c }); });
+
+/* ---------- Codes ---------- */
+function vueCodes() {
+  $("codes-tab").innerHTML = `<thead><tr><th>Élève</th><th>Classe</th><th>Identifiant</th><th>Code</th></tr></thead><tbody>` +
+    elevesClasse().map(e => `<tr><td>${esc(nomComplet(e))}</td><td>${esc(e.classe)}</td><td class="code-el">${esc(e.id)}</td><td class="code-el">${esc(e.code)}${e.provisoire ? ' <small class="note-info">provisoire</small>' : ""}</td></tr>`).join("") + "</tbody>";
+}
+
+if (P.DEMO) $("demo").hidden = false;
+CLE = P.local.lire("philo:cle", null) || JSON.parse(sessionStorage.getItem("philo:cle") || "null");
+if (CLE || P.DEMO) ouvrirTableau(); else $("cle").focus();
+</script>
+</body>
+</html>

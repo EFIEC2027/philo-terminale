@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philosophie Terminale</title>
+<link rel="icon" href="logo-efi.png">
+<link rel="stylesheet" href="style.css?v=20261115a">
+<style>
+.connexion { max-width: 420px; margin: 40px auto; display: grid; gap: 14px; }
+.connexion h1 { text-align: center; }
+.bonjour { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.bonjour small { color: var(--doux); }
+.quiz-note { border: 2px solid var(--accent); background: var(--accent-doux); }
+.quiz-note.vide { border-color: var(--trait); background: var(--papier); }
+.carte-quiz { display: grid; gap: 8px; align-content: start; }
+.carte-quiz p { margin: 0; }
+.carte-quiz .stat { color: var(--doux); font-size: .9rem; }
+.carte-quiz .bouton { justify-self: start; }
+.regle { border-left: 4px solid var(--or); background: #fbf6ea; padding: 10px 14px; border-radius: 0 10px 10px 0; font-size: .93rem; }
+.regle p { margin: 0; }
+.notes-liste { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.notes-liste li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--trait); }
+.notes-liste b { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="demo" id="demo" hidden>Mode démonstration : l'adresse du script Google n'est pas encore réglée (config.js). Rien n'est enregistré.</div>
+<header class="entete">
+  <img class="logo" src="logo-efi.png" alt="EFI Casablanca">
+  <div class="marque">Philosophie <span>Terminale</span></div>
+  <div class="droite" id="barre-eleve" hidden><span id="qui"></span><button class="bouton discret" id="b-deconnexion" type="button">Se déconnecter</button></div>
+</header>
+
+<main class="page">
+  <!-- Connexion -->
+  <form class="carte connexion" id="form-connexion" autocomplete="off">
+    <h1>Connexion</h1>
+    <label class="champ">Identifiant<input type="text" id="c-id" placeholder="prenom.nom" autocapitalize="off" spellcheck="false" required></label>
+    <label class="champ">Code<input type="password" id="c-code" inputmode="numeric" maxlength="8" required></label>
+    <p class="erreur" id="erreur-connexion" hidden></p>
+    <button class="bouton plein grand" id="b-connexion" type="submit">Se connecter</button>
+    <p class="note-info">Ton identifiant et ton code t'ont été donnés par ton professeur. Code oublié : demande-lui un nouveau code.</p>
+  </form>
+
+  <!-- Choix du code personnel (première connexion) -->
+  <form class="carte connexion" id="form-nouveau" hidden autocomplete="off">
+    <h1>Choisis ton code</h1>
+    <p style="margin:0">Bonjour <b id="nc-prenom"></b>. Tu t'es connecté(e) avec un code provisoire : choisis maintenant <b>ton propre code à 4 chiffres</b> et retiens-le bien.</p>
+    <label class="champ">Nouveau code<input type="password" id="nc-code" inputmode="numeric" maxlength="4" required></label>
+    <label class="champ">Retape-le<input type="password" id="nc-code2" inputmode="numeric" maxlength="4" required></label>
+    <p class="erreur" id="nc-erreur" hidden></p>
+    <button class="bouton plein grand" id="b-nouveau" type="submit">Enregistrer mon code</button>
+  </form>
+
+  <!-- Accueil -->
+  <div class="pile" id="accueil" hidden>
+    <div class="bonjour"><h1 id="titre-bonjour">Bonjour</h1><small id="chapitre"></small></div>
+
+    <section class="carte quiz-note vide" id="carte-note">
+      <p class="surtitre">Quiz noté</p>
+      <div id="zone-note"><p class="note-info">Chargement…</p></div>
+    </section>
+
+    <div class="regle">
+      <p><b>Règle des quiz.</b> Pendant un quiz, tu restes sur la page, en plein écran. Si tu en sors (autre onglet, autre application, touche Échap), un quiz d'entraînement est <b>annulé</b> et un quiz noté est <b>bloqué</b> jusqu'à ce que ton professeur vienne le débloquer. 20 questions à 1 point, plus une question bonus à 1 point.</p>
+    </div>
+
+    <section>
+      <h2>Quiz d'entraînement <span class="etiquette libre">non notés</span></h2>
+      <p class="note-info" style="margin-bottom:10px">Pour réviser : les questions changent à chaque fois, et la correction expliquée s'affiche à la fin. Recommence autant que tu veux.</p>
+      <div class="grille" id="liste-entr"></div>
+    </section>
+
+    <section class="carte">
+      <h2>Mes notes</h2>
+      <ul class="notes-liste" id="mes-notes"></ul>
+    </section>
+  </div>
+</main>
+
+<script src="config.js?v=20261115a"></script>
+<script src="commun.js?v=20261115a"></script>
+<script src="quiz-entrainement.js?v=20261115a"></script>
+<script src="evaluations.js?v=20261115a"></script>
+<script>
+const $ = id => document.getElementById(id);
+if (P.DEMO) $("demo").hidden = false;
+const titreQuiz = id => ((window.QUIZ_NOTES || []).find(q => q.id === id) || {}).titre || id;
+
+async function connecter(id, code) {
+  if (P.DEMO) return { ok: true, prenom: id.split(".")[0] || "Élève", classe: "démo", changer: false, entrainement: {}, notes: {}, ouverte: (window.QUIZ_NOTES[0] || {}).id };
+  return P.get({ action: "connexion", id, code });
+}
+
+$("form-connexion").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const id = $("c-id").value.trim().toLowerCase(), code = $("c-code").value.trim(), err = $("erreur-connexion");
+  err.hidden = true; $("b-connexion").disabled = true; $("b-connexion").textContent = "Connexion…";
+  try {
+    const d = await connecter(id, code);
+    if (!d.ok) { err.textContent = "Identifiant ou code incorrect."; err.hidden = false; }
+    else if (d.changer) nouveauCode({ id, code, prenom: d.prenom, classe: d.classe });
+    else { P.ouvrir({ id, code, prenom: d.prenom, classe: d.classe }); accueil(d); }
+  } catch { err.textContent = "Connexion impossible. Vérifie Internet, puis réessaie."; err.hidden = false; }
+  $("b-connexion").disabled = false; $("b-connexion").textContent = "Se connecter";
+});
+
+function nouveauCode(s) {
+  $("form-connexion").hidden = true; $("form-nouveau").hidden = false;
+  $("nc-prenom").textContent = s.prenom || s.id; $("nc-code").focus();
+  $("form-nouveau").onsubmit = async ev => {
+    ev.preventDefault();
+    const e = $("nc-erreur"), a = $("nc-code").value.trim(), b = $("nc-code2").value.trim();
+    e.hidden = true;
+    if (!/^\d{4}$/.test(a)) { e.textContent = "Ton code doit faire exactement 4 chiffres."; e.hidden = false; return; }
+    if (a !== b) { e.textContent = "Les deux codes sont différents. Retape-les."; e.hidden = false; return; }
+    $("b-nouveau").disabled = true;
+    try {
+      const r = await P.post({ action: "changerCode", id: s.id, code: s.code, nouveau: a });
+      if (r.ok) { s.code = a; P.ouvrir(s); $("form-nouveau").hidden = true; accueil(await connecter(s.id, a)); }
+      else { e.textContent = r.erreur === "trop_simple" ? "Ce code est trop facile à deviner. Choisis-en un autre." : "Enregistrement impossible. Réessaie ou appelle ton professeur."; e.hidden = false; }
+    } catch { e.textContent = "Connexion impossible. Vérifie Internet, puis réessaie."; e.hidden = false; }
+    $("b-nouveau").disabled = false;
+  };
+}
+
+function accueil(d) {
+  const s = P.session();
+  $("form-connexion").hidden = true; $("accueil").hidden = false; $("barre-eleve").hidden = false;
+  $("qui").textContent = `${s.prenom || s.id} · ${s.classe}`;
+  $("titre-bonjour").textContent = `Bonjour ${s.prenom || ""}`.trim();
+  $("chapitre").textContent = window.CHAPITRE ? "Chapitre en cours : " + window.CHAPITRE : "";
+  // Quiz noté
+  const zn = $("zone-note"), ouverte = d.ouverte, deja = ouverte && d.notes && d.notes[ouverte] !== undefined;
+  $("carte-note").classList.toggle("vide", !ouverte || deja);
+  if (ouverte && !deja) zn.innerHTML = `<h2>${P.esc(titreQuiz(ouverte))}</h2><p style="margin:0 0 12px">Ton professeur a ouvert ce quiz pour ta classe. Prépare-toi : une fois commencé, tu ne peux plus quitter la page.</p><a class="bouton plein grand" href="quiz.html?mode=note">Aller au quiz noté</a>`;
+  else if (deja) zn.innerHTML = `<p style="margin:0">Tu as rendu « ${P.esc(titreQuiz(ouverte))} » : <b>${P.virgule(d.notes[ouverte])} / 20</b>.</p>`;
+  else zn.innerHTML = `<p class="note-info">Aucun quiz noté n'est ouvert pour ta classe en ce moment. Attends le signal de ton professeur.</p>`;
+  // Entraînement
+  $("liste-entr").innerHTML = (window.QUIZ_ENTRAINEMENT || []).map(q => {
+    const st = (d.entrainement || {})[q.id];
+    const stat = st ? `Meilleure note : <b>${st.meilleure === null ? "–" : P.virgule(st.meilleure) + " / 20"}</b> · ${st.tentatives} essai${st.tentatives > 1 ? "s" : ""}` : "Pas encore fait";
+    return `<article class="carte carte-quiz"><h3>${P.esc(q.titre)}</h3><p>${P.esc(q.description)}</p><p class="stat">${stat}</p><a class="bouton plein" href="quiz.html?q=${encodeURIComponent(q.id)}">Commencer</a></article>`;
+  }).join("");
+  // Notes
+  const notes = Object.entries(d.notes || {});
+  $("mes-notes").innerHTML = notes.length ? notes.map(([q, n]) => `<li><span>${P.esc(titreQuiz(q))}</span><b>${P.virgule(n)} / 20</b></li>`).join("") : '<li class="note-info">Pas encore de note.</li>';
+}
+
+$("b-deconnexion").addEventListener("click", P.quitter);
+(async () => {
+  const s = P.session();
+  if (!s) { $("c-id").focus(); return; }
+  try { const d = await connecter(s.id, s.code); if (d.ok && !d.changer) { P.ouvrir({ ...s, prenom: d.prenom, classe: d.classe }); accueil(d); } else P.local.suppr("philo:session"); }
+  catch { $("erreur-connexion").textContent = "Connexion impossible. Vérifie Internet, puis recharge la page."; $("erreur-connexion").hidden = false; }
+})();
+window.addEventListener("pageshow", e => { if (e.persisted) location.reload(); });
+</script>
+</body>
+</html>
